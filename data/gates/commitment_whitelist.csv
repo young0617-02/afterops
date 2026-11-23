@@ -1,0 +1,15 @@
+rule_id,commit_class,allowed_intents,requires_evidence,allow_numbers,note
+W-01,policy_cite,ALL,yes,yes,只能引用条文原句，必须带 entry_id@version 与出处；条文内的时间区间随条文一起放行
+W-02,tool_fact,ALL,yes,yes,金额/状态/库存/轨迹取自 SQL 工具返回值，数字必须与工具结果逐字一致
+W-03,status_info,ALL,yes,yes,状态描述（如「当前状态：运输中」），不是对未来的承诺
+W-04,procedure,ALL,yes,no,流程与入口说明（「可在订单详情页提交申请」），受理动作归人工
+W-05,handoff,ALL,no,no,人工转接出口，每轮必须出现（F-009）
+W-06,limitation,ALL,no,no,能力边界与免责口径声明
+W-07,apology,ALL,no,no,中性致歉，不得附带任何承诺或核定结论
+X-01,promise_refund_outcome,NONE,no,no,红线：AI 不得承诺退款结果/全额退（F-008/F-010）
+X-02,promise_compensation,NONE,no,no,红线：赔付与否、金额、形式一律由人工核定
+X-03,promise_price,NONE,no,no,红线：不得承诺价格、最低价、必定补差
+X-04,promise_deadline,NONE,no,no,红线：不得对具体某笔业务承诺到账/送达时刻（规则区间引用走 W-01）
+X-05,promise_stock,NONE,no,no,红线：库存只能陈述查询时点快照，不得承诺「一定有货」
+X-06,confirm_action,NONE,no,no,红线：不得输出「已为您办理/确认退款」这类单方确认
+X-07,assume_resolution,NONE,no,no,红线：不使用「沉默即视为解决」口径（与 Intercom Fin 相反，见 README）

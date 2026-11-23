@@ -1,0 +1,6 @@
+{"id": "sess-002", "user": ["订单 ORD-2026-000102 什么时候到", "那能退吗,第2个问题"], "vendor": ["这边帮您查一下哦", "预计 2 个工作日送达"], "labels": ["Delivery duration"], "turns": 4}
+{"id": "sess-004", "user": ["订单 ORD-2026-000104 什么时候到", "那能退吗,第4个问题"], "vendor": ["这边帮您查一下哦", "预计 2 个工作日送达"], "labels": ["Check order status"], "turns": 4}
+{"id": "sess-005", "user": ["订单 ORD-2026-000105 什么时候到", "那能退吗,第5个问题"], "vendor": ["这边帮您查一下哦", "预计 2 个工作日送达"], "labels": ["Contact customer service"], "turns": 4}
+{"id": "sess-006", "user": ["订单 ORD-2026-000106 什么时候到", "那能退吗,第6个问题"], "vendor": ["这边帮您查一下哦", "预计 2 个工作日送达"], "labels": ["Warranty and return policy"], "turns": 4}
+{"id": "sess-007", "user": ["订单 ORD-2026-000107 什么时候到", "那能退吗,第7个问题"], "vendor": ["这边帮您查一下哦", "预计 2 个工作日送达"], "labels": ["Delivery duration"], "turns": 4}
+{"id": "sess-008", "user": ["订单 ORD-2026-000108 什么时候到", "那能退吗,第8个问题"], "vendor": ["这边帮您查一下哦", "预计 2 个工作日送达"], "labels": ["Change order information"], "turns": 4}

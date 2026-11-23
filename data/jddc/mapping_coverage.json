@@ -1,0 +1,14 @@
+{
+  "corpus_available": true,
+  "observed_labels": 5,
+  "mapped_labels": 5,
+  "unmapped_labels": 0,
+  "coverage_rate": "5/5",
+  "labels_from_synthetic_fixture": true,
+  "conclusion": "当前 observed_labels 来自 --fixture 生成的合成结构样例，只证明清洗/核对脚本可跑，不能作为语料覆盖率结论。",
+  "map_rows": 11,
+  "taxonomy_codes": 20,
+  "rows_pointing_to_unknown_code": [],
+  "rows_without_evidence": [],
+  "unmapped_examples": []
+}

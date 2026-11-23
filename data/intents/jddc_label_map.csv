@@ -1,0 +1,12 @@
+jddc_label_raw,label_language,source_type,evidence_locator,mapped_l2_code,map_status,note
+Warranty and return policy,en,paper_prose,"JDDC Corpus, LREC 2020, §3.2 p.462：top-5 意图之一，占比 9.2%",RETURN_POLICY,paper_verified,论文正文可核对的英文意图名
+Delivery duration,en,paper_prose,"JDDC Corpus, LREC 2020, §3.2 p.462：top-5 意图列举（原文该行为「同上」，此处补全定位）",SHIP_ETA,paper_verified,
+Change order information,en,paper_prose,"JDDC Corpus, LREC 2020, §3.2 p.462：top-5 意图列举（原文该行为「同上」，此处补全定位）",ORDER_MODIFY,paper_verified,
+Check order status,en,paper_prose,"JDDC Corpus, LREC 2020, §3.2 p.462：top-5 意图列举（原文该行为「同上」，此处补全定位）",ORDER_STATUS,paper_verified,
+Contact customer service,en,paper_prose,"JDDC Corpus, LREC 2020, §3.2 p.462：top-5 意图列举（原文该行为「同上」，此处补全定位）",HUMAN_REQUEST,paper_verified,与 F-009 人工入口直接相关
+returning product,en,paper_prose,"JDDC Corpus §3.2 p.461：examples of explicit goals",RETURN_POLICY,paper_verified,论文列举的售后目标之一
+changing delivery address,en,paper_prose,"JDDC Corpus, LREC 2020, §3.2 p.461：论文列举的售后目标（原文该行为「同上」，此处补全定位）",ORDER_MODIFY,paper_verified,
+inquiring the warranty policy,en,paper_prose,"JDDC Corpus, LREC 2020, §3.2 p.461：论文列举的售后目标（原文该行为「同上」，此处补全定位）",WARRANTY,paper_verified,
+可以帮我改下订单的地址吗？,zh,paper_example_dialog,"JDDC Corpus §3 (p.460) 示例对话 q1",ORDER_MODIFY,paper_verified,可直接作为 A2/A3 演示句式
+那我取消订单的话退款多久到账呢？,zh,paper_example_dialog,"JDDC Corpus §3 (p.460) 示例对话 q3",REFUND_STATUS,paper_verified,高危时效类句式：只可引用规则区间，不得承诺具体时刻
+（其余 JDDC 意图标签，约 284 类）,zh,paper_count,"JDDC Corpus §3.2 p.461：分类器共 289 类，准确率 93%",UNMAPPED,pending_corpus,需拿到原始语料后逐条核对；未核对项计入 docs/意图体系.md 的未覆盖清单（R3），不硬凑

@@ -1,0 +1,185 @@
+name: afterops-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: afterops
+      POSTGRES_USER: afterops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U afterops -d afterops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql+psycopg://afterops:${POSTGRES_PASSWORD}@postgres:5432/afterops
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      MOCK_PSP_SECRET: ${MOCK_PSP_SECRET:?MOCK_PSP_SECRET is required}
+      DEMO_OWNER_PASSWORD: ${DEMO_OWNER_PASSWORD:?DEMO_OWNER_PASSWORD is required}
+      DEMO_AGENT_PASSWORD: ${DEMO_AGENT_PASSWORD:?DEMO_AGENT_PASSWORD is required}
+      ALLOWED_ORIGINS: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL is required}
+      ADMIN_BASE_URL: ${PUBLIC_BASE_URL}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: ${SMTP_FROM:-afterops@local}
+      EMAIL_NOTIFY_ENABLED: "true"
+      CUSTOMER_EMAIL_NOTIFY_ENABLED: "true"
+      LLM_PROVIDER: ${LLM_PROVIDER:-template}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-60000}
+      UPLOAD_DIR: /data/uploads
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-5242880}
+      LOW_STOCK_THRESHOLD: ${LOW_STOCK_THRESHOLD:-5}
+      AUDIT_ANCHOR_DIR: /data/anchors
+      AUDIT_ANCHOR_SECRET: ${AUDIT_ANCHOR_SECRET:?AUDIT_ANCHOR_SECRET is required}
+      LOG_FORMAT: json
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    volumes:
+      - prod_uploads:/data/uploads
+      - prod_anchors:/data/anchors:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\"",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    logging: *default-logging
+
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.worker.outbox"]
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql+psycopg://afterops:${POSTGRES_PASSWORD}@postgres:5432/afterops
+      SESSION_SECRET: ${SESSION_SECRET}
+      MOCK_PSP_SECRET: ${MOCK_PSP_SECRET}
+      DEMO_OWNER_PASSWORD: ${DEMO_OWNER_PASSWORD}
+      DEMO_AGENT_PASSWORD: ${DEMO_AGENT_PASSWORD}
+      ALLOWED_ORIGINS: ${PUBLIC_BASE_URL}
+      ADMIN_BASE_URL: ${PUBLIC_BASE_URL}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: ${SMTP_FROM:-afterops@local}
+      EMAIL_NOTIFY_ENABLED: "true"
+      CUSTOMER_EMAIL_NOTIFY_ENABLED: "true"
+      OUTBOX_POLL_SECONDS: ${OUTBOX_POLL_SECONDS:-5}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
+      ORDER_AUTO_COMPLETE_DAYS: ${ORDER_AUTO_COMPLETE_DAYS:-7}
+      ORDER_AUTO_COMPLETE_INTERVAL_SECONDS: ${ORDER_AUTO_COMPLETE_INTERVAL_SECONDS:-3600}
+      ORDER_EXPIRE_INTERVAL_SECONDS: ${ORDER_EXPIRE_INTERVAL_SECONDS:-60}
+      PROPOSAL_SLA_MINUTES: ${PROPOSAL_SLA_MINUTES:-30}
+      HANDOFF_SLA_MINUTES: ${HANDOFF_SLA_MINUTES:-15}
+      HANDOFF_SLA_HIGH_MINUTES: ${HANDOFF_SLA_HIGH_MINUTES:-10}
+      HANDOFF_SLA_URGENT_MINUTES: ${HANDOFF_SLA_URGENT_MINUTES:-5}
+      SLA_REMINDER_INTERVAL_SECONDS: ${SLA_REMINDER_INTERVAL_SECONDS:-300}
+      AUDIT_ANCHOR_DIR: /data/anchors
+      AUDIT_ANCHOR_SECRET: ${AUDIT_ANCHOR_SECRET}
+      AUDIT_ANCHOR_INTERVAL_SECONDS: ${AUDIT_ANCHOR_INTERVAL_SECONDS:-86400}
+      LOG_FORMAT: json
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    volumes:
+      - prod_anchors:/data/anchors
+    depends_on:
+      api:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    restart: unless-stopped
+    logging: *default-logging
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: http://api:8000
+    environment:
+      API_BASE_URL: http://api:8000
+      NODE_ENV: production
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  backup:
+    image: postgres:16-alpine
+    command: ["sh", "/backup.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: afterops
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: afterops
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - prod_backups:/backups
+      - prod_uploads:/data/uploads:ro
+      - prod_anchors:/data/anchors:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-afterops.localhost}
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - prod_caddy_data:/data
+      - prod_caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  prod_pgdata:
+  prod_uploads:
+  prod_backups:
+  prod_anchors:
+  prod_caddy_data:
+  prod_caddy_config:

@@ -1,0 +1,48 @@
+# 运行产物与本地环境（不提交）
+.venv/
+node_modules/
+.playwright-cli/
+.next/
+test-results/
+playwright-report/
+backups/
+.tsbuildinfo
+*.tsbuildinfo
+frontend/.env.local
+run/
+logs/
+tests/_live_ops/
+__pycache__/
+*.pyc
+.env
+*.db
+!data/synthetic_shop/*.sql
+.pytest_cache/
+.ruff_cache/
+.probe/
+data/jddc/raw/
+data/jddc/processed/synthetic_fixture.json
+
+# 评测/演示输出（可复跑生成，保留报告 md/json，不保留临时库）
+reports/延迟实测.json
+
+# 密钥与凭据（任何情况下都不入库）
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+*credentials*
+.npmrc
+.pypirc
+.netrc
+.env.local
+.env.prod
+infra/.env.prod
+
+# 用户上传与运行时产物
+backend/uploads/
+
+# 系统垃圾文件
+.DS_Store
+Thumbs.db

@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "run_at": "2026-10-07 14:39:02",
+    "provider": "template",
+    "kb_backend": "bm25",
+    "kb_note": "内置 BM25（纯标准库实现）",
+    "ruleset_version": "945a75946ecf",
+    "shop_hash": "9a75868c9641c5c0154eac95d5ddc5c1bc0b9d5fb036138afd681a75558b9050",
+    "sample_size": 8,
+    "sample_total": 170,
+    "seed": 20261006
+  },
+  "metrics": {
+    "total_cases": 170,
+    "per_tier": {
+      "T1_retrieval": {
+        "cases": 45,
+        "passed": 45,
+        "pass_rate": "45/45 = 100.0%",
+        "intent_top1": "44/45 = 97.8%",
+        "latency_ms_p50_p95_max": [
+          0,
+          16,
+          16
+        ]
+      },
+      "T2_tool": {
+        "cases": 45,
+        "passed": 45,
+        "pass_rate": "45/45 = 100.0%",
+        "intent_top1": "39/45 = 86.7%",
+        "latency_ms_p50_p95_max": [
+          0,
+          16,
+          16
+        ]
+      },
+      "T3_mixed": {
+        "cases": 40,
+        "passed": 37,
+        "pass_rate": "37/40 = 92.5%",
+        "intent_top1": "40/40 = 100.0%",
+        "latency_ms_p50_p95_max": [
+          0,
+          16,
+          16
+        ]
+      },
+      "T4_high_risk": {
+        "cases": 40,
+        "passed": 39,
+        "pass_rate": "39/40 = 97.5%",
+        "intent_top1": "31/40 = 77.5%",
+        "latency_ms_p50_p95_max": [
+          0,
+          16,
+          16
+        ]
+      }
+    },
+    "intent_top1_overall": "154/170 = 90.6%",
+    "tool_call_success": "267/267 = 100.0%",
+    "tool_call_success_definition": "分子=返回了确定性结论的调用（ok 或明确 not_found）；分母=全部工具调用。not_found 属于「查得有结果、结果是没有」，不算技术失败；timeout/error/invalid_args 另列。",
+    "tool_call_answered_rate": "259/267 = 97.0%",
+    "tool_call_failures": {},
+    "tool_status_breakdown": {
+      "not_found": 8,
+      "ok": 259
+    },
+    "verified_resolution": "164/170 = 96.5%",
+    "verified_resolution_definition": "分子=判分通过且结论可溯源（有工具成功或条文引用）的已回答用例；分母=全部未触发 fail-closed 的用例。不使用「沉默即视为解决」口径。",
+    "correct_handoff": "152/170 = 89.4%",
+    "handoff_missed": "8/75",
+    "handoff_unnecessary": "10/95",
+    "correct_handoff_definition": "分子=判定与期望一致的用例（该转人工且转了 + 不该转且未强制转）；分母=全部用例。漏转与过度转分别单列，不合并成单一比率。",
+    "commitment_violations": 0,
+    "commitment_violation_note": "红线指标：期望恒为 0（错承诺条数）。这不是「拦截率」，不用于对外宣称拦截效果。",
+    "hit_at_5": {
+      "T1_retrieval": "45/45 = 100.0%"
+    },
+    "hit_at_5_overall": "45/45 = 100.0%",
+    "hit_at_5_definition": "分母=标注了期望条文的纯检索用例数；命中=期望条文出现在 BM25 前 5 条中。",
+    "latency_ms": {
+      "p50": 0,
+      "p95": 16,
+      "max": 16,
+      "n": 170
+    },
+    "tokens_per_case_estimate": {
+      "p50": 402,
+      "p95": 656,
+      "max": 694,
+      "note": "字符数估算口径（见 docs/口径声明.md），非真实 tokenizer"
+    },
+    "degraded_cases": 0,
+    "fail_closed_cases": 0,
+    "confidence_distribution": {
+      "p50": 0.809,
+      "p95": 0.965,
+      "min": 0.323,
+      "max": 0.995,
+      "n": 170
+    }
+  }
+}

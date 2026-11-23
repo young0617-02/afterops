@@ -1,0 +1,713 @@
+Proceedings of the 12th Conference on Language Resources and Evaluation (LREC 2020) , pages 459–466
+Marseille, 11–16 May 2020
+c© European Language Resources Association (ELRA), licensed under CC-BY -NC
+459
+The JDDC Corpus: A Large-Scale Multi-Turn Chinese Dialogue Dataset for
+E-commerce Customer Service
+Meng Chen, Ruixue Liu, Lei Shen, Shaozu Yuan, Jingyan Zhou,
+Y ouzheng Wu, Xiaodong He, Bowen Zhou
+JD AI, Beijing, China
+{chenmeng20, liuruixue, shenlei41, yuanshaozu, zhoujingyan3}@jd.com
+{wuyouzheng1, xiaodong.he, bowen.zhou}@jd.com
+Abstract
+Human conversations are complicated and building a human-like dialogue agent is an extremely challenging task. With the rapid
+development of deep learning techniques, data-driven models become more and more prevalent which need a huge amount of real
+conversation data. In this paper, we construct a large-scale real scenario Chinese E-commerce conversation corpus, JDDC, with
+more than 1 million multi-turn dialogues, 20 million utterances, and 150 million words. The dataset reﬂects several characteristics
+of human-human conversations, e.g., goal-driven, and long-term dependency among the context. It also covers various dialogue
+types including task-oriented, chitchat and question-answering. Extra intent information and three well-annotated challenge sets
+are also provided. Then, we evaluate several retrieval-based and generative models to provide basic benchmark performance on the
+JDDC corpus. And we hope JDDC can serve as an effective testbed and beneﬁt the development of fundamental research in dialogue task.
+Keywords: large-scale dataset, multi-turn dialogues, real E-commerce scenario
+1. Introduction
+Building a human-like conversational agent is regarded as
+one of the most challenging tasks in Artiﬁcial Intelligence
+(Turing, 2009). Because of the complexity, real scenario
+human conversations can be seen as a sequential, continu-
+ous, decision-making process, which relies on lots of infor-
+mation to make the conversation go on. For example, dia-
+logue context, intents, external knowledge, common sense,
+emotions, participants’ background and personas, etc. All
+these could have an impact on the response in a conver-
+sation. Moreover, these uncertainties make dialogue task
+extremely different from traditional machine learning tasks
+which usually have explicit targets and clearly deﬁned eval-
+uation metrics.
+To tackle this challenging problem, constructing a dialogue
+dataset is the most essential work. Especially for popular
+deep learning based approaches, large scale of training cor-
+pus in real scenario becomes decisive. However, existing
+datasets are still deﬁcient. Datasets with structured annota-
+tions (e.g., slots and corresponding values) are often small-
+scale and in a limited capacity. Either traditional domain-
+speciﬁc ones (Allen et al., 1996; Petukhova et al., 2014;
+Bordes et al., 2016; Dodge et al., 2015) or recent multi-
+domain ones (Budzianowski et al., 2018; Shah et al., 2018;
+El Asri et al., 2017) are usually built for task-oriented dia-
+logue systems. Another typical branch of works collects the
+dialogue corpus from movie subtitles, such as OpenSubti-
+tles (Tiedemann, 2009) and Cornell (Danescu-Niculescu-
+Mizil and Lee, 2011), which contain long sessions (over
+100 turns) and some expressions like individual mono-
+logues may be not suitable for dialogue systems. More re-
+cently, some researchers construct dialogue datasets from
+social media networks (e.g., Twitter Dialogue Corpus (Rit-
+ter et al., 2011) and Chinese Weibo dataset (Wang et al.,
+2013)), or online forums (e.g., Chinese Douban dataset (Wu
+et al., 2017) and Ubuntu Dialogue Corpus (Lowe et al.,
+2015)). Although in large scale, they are different from
+real scenario conversations, as posts and replies are infor-
+mal, single-turn or short-term related.
+In this work, we construct a large-scale multi-turn Chinese
+dialogue dataset, namely JDDC (Jing Dong Dialogue Cor-
+pus), with more than 1 million multi-turn dialogues, 20
+million utterances, and 150 million words, which contains
+conversations about after-sales topics between users and
+customer service staffs in E-commerce scenario. Different
+from existing datasets mentioned above, the JDDC dataset
+illustrates the complexity of conversations in E-commerce.
+Table 1 presents a typical session in the corpus which con-
+tains services including: 1) task completion: changing the
+order address ( q1-q2, text in blue); 2) knowledge-based
+Question Answering (QA): answering the question about
+refund period ( q3, text in red); and 3) feeling connection
+with the user: actively responding to the user’s complains
+and soothe his/her emotion ( q4-q6, text in purple). There-
+fore, this corpus supports to build a more challenging and
+comprehensive dialogue system. Additionally, the average
+conversation turn in a dialogue is 20, so the long-term de-
+pendency among the context is an important feature. As the
+example shown in Table 1, to answer q4, the assistant must
+look back to r2 for further information. Besides, some con-
+tents in a real conversation are redundant or irrelevant to the
+ﬁnal request. Taking q2 as an example, the user explains
+the reason for his/her requirements, which actually has no
+contribution to solve the problem. Since all the data from
+our corpus is extracted from the real scenario, it reﬂects the
+characteristics in human-human conversations.
+To bring the dataset more valuable for dialogue research,
+we label the intent for each query in all dialogues with a
+high-precision in-house classiﬁer, which covers 289 differ-
+ent intents in real E-commerce after-sales scenario. We
+also prepare three Challenge Sets for evaluating dialogue
+systems better. In each set, different input information
+is provided and multiple ground-truth answers are anno-
+tated. We plan to annotate more information (e.g., emo-
+460
+q1 可以帮我改下订单的地址吗？ (Could you help me change the address of the order?)
+r1 同一市内可以联系配送员直接修改的哦。 (You can contact the delivery staff directly if the two addresses are in the
+same city.)
+q2 不在同一个城市，现在地址是上海，但是我明天要回安徽。 (Not the same city. The current address is Shanghai,
+but I am going to Anhui tomorrow.)
+r2 抱歉，地址在不同城市不能操作的，只能建议您重新下单哦。 (Sorry, you cannot change the address to a different
+city. In this case, we suggest you place a new order.)
+q3 那我取消订单的话退款多久到账呢？ (How long does it take for the refund to arrive if I cancel the order?)
+r3 微信零钱1个工作日内到账，储蓄卡1-7个工作日内到账，信用卡1-15个工作日内到账的哦！ (For Wechat
+change, it arrives in 1 working day. For debit card, it arrives in 1-7 working days. And for credit card, it arrives in 1-15
+working days.)
+q4 为什么不能改地址，你们这也太不方便了。 (Why can’t I change my address? That is too inconvenient.)
+r4 非常抱歉，我们物流还有待完善呢。 (I’m sorry. Our logistics system needs to be improved.)
+q5 这也太麻烦了，我还急着用呢。 (That is too troublesome, I’m in a hurry.)
+r5 非常抱歉！如果是我的话我也会很着急的，我们会改进的！ (I’m so sorry! If I were you, I would feel the same.
+We will do our best to improve it!)
+q6 行吧。 (Fine.)
+r6 谢谢您的理解！还有什么能帮到您的吗？ (Thanks for your understanding! What else can I do for you?)
+Table 1: An example from JDDC corpus. The actual corpus is in Chinese. Best viewed in color.
+tions and external knowledge) for this dataset in the fu-
+ture. We hope the JDDC corpus can serve as an effective
+testbed for multi-turn dialogue research, to drive the devel-
+opment of fundamental techniques such as representation
+learning, neural-symbolic learning, reinforcement learning,
+knowledge-based reasoning, context modeling, and con-
+trollable response generation, etc.
+In the following parts, related work is presented in Sec-
+tion 2.. Section 3. illustrates the dataset construction pro-
+cess and detailed characteristics. We then evaluate existing
+mainstream approaches, including retrieval-based and gen-
+erative approaches on the developed datasets in Section 4..
+Finally, Section 5. concludes the paper.
+2. Related Work
+The research on chatbots and dialogue systems has kept ac-
+tive for decades. The growth of this ﬁeld has been consis-
+tently supported by the development of new datasets. We
+brieﬂy review existing dialogue datasets, and roughly di-
+vide them into three categories according to data features:
+1) large scale data extracted from social media or forums, 2)
+artiﬁcial dialogue corpus constructed from crowd workers,
+and 3) corpus collected from real human-human coversa-
+tion scenario. A list of related large-scale datasets discussed
+is provided in Table 2.
+Traditional methods tend to extract conversation alike in-
+formation from social media or forum (Ritter et al., 2010;
+Shang et al., 2015a; Wu et al., 2017; Lowe et al., 2015; Li
+et al., 2018; Al-Rfou et al., 2016). Despite of the massive
+number of utterances included in these datasets, they usu-
+ally provide ambiguous dialogue ﬂows. It’s due to the fact
+that these datasets mainly comprise post-reply pairs on so-
+cial networks or forums where people interact with others
+more freely (often more than two speakers are involved in
+the conversation). Moreover, the replies in these datasets
+are most or only related to the post and there are very few
+context information provided for query understanding.
+To imitate the natural conversation ﬂows in real life, some
+datasets are collected with pre-deﬁned prompts or guided
+schema. The DuConv (Wu et al., 2019) and PERSONA-
+CHAT (Zhang et al., 2018a) datasets are collected with
+Wizard-of-Oz technique (Kelley, 1984). The former one is
+collected during knowledge-driven conversation with one
+person playing as the conversation leader and the other one
+playing as the follower. However, the conversation goal is
+deﬁned in advance. The later one collects data from two
+crowd workers with different persona information provided
+during conversation. Apart from the WOZ, the SGD (Ras-
+togi et al., 2019) dataset is constructed by ﬁrstly generating
+dialogue outlines by simulator, then uses a crowd-sourcing
+procedure to paraphrase the outlines to natural language ut-
+terances. Even though these datasets keep the nature of
+conversation ﬂow in some sense, offering large scale of
+conversation information is still infeasible. In that case
+DuConv only consists of less than 30k dialogues. SGD and
+PERSONA-CHAT datasets present even less dialogue in-
+formation.
+The most similar dataset to our JDDC corpus is ECD
+(Zhang et al., 2018b) corpus which is also collected from
+real E-commerce scenario. Although it keeps the bi-turn in-
+formation for real conversation and provides a considerable
+number of utterances, there are less turns offered for each
+conversation (7 turns per session) and no annotated test data
+is provided. Compared to ECD (Zhang et al., 2018b), the
+JDDC corpus has much longer context (average 20 turns
+per session), and we also prepare three high-quality human-
+annotated evaluation sets. Besides, extra intent information
+for each query is provided. These intents contain beneﬁ-
+cial information for dialogue system to understand queries
+under complicated after-sales circumstances.
+3. Dataset Construction
+3.1. Data Collection and Statistics
+We collect the conversations between users and customer
+service staffs from Jing Dong (JD) 1, which is a popular
+E-commerce website in China. After crawling, we de-
+1https://www.jd.com
+461
+Dataset Dialogues Utterances Words Description
+Twitter Corpus (Ritter
+et al., 2010) 1,300,000 3,000,000 - Post-reply pairs extracted from Twitter
+(English)
+Weibo Corpus (Shang
+et al., 2015a) 4,435,959 8,871,918 - Post-comment pairs extracted from
+Weibo.com (Chinese)
+Ubuntu Corpus (Lowe
+et al., 2015) 930,000 7,100,000 100,000,000 Post-reply chat logs from Ubuntu
+Forum (English)
+Douban Corpus (Wu et
+al., 2017) 1,060,000 7,092,000 131,747,880 Post-reply chat logs from Douban
+(Chinese)
+PERSONA-CHAT
+(Zhang et al., 2018a) 10,907 162,064 - Personalizing chit-chat dialogue corpus
+(English)
+DuConv Corpus (Wu et
+al., 2019) 29,858 270,399 2,872,340 Knowledge-driven conversation dataset
+(Chinese)
+SGD Corpus (Rastogi
+et al., 2019) 16,142 659,928 3,217,149 Multi-domain task-oriented dialogue
+corpus (English)
+ECD Corpus (Zhang et
+al., 2018b) 1,020,000 7,500,000 49,000,000 E-commerce dialogue corpus from
+Taobao (Chinese)
+JDDC Corpus 1,024,196 20,451,337 150,716,172 E-commerce dialogue corpus from JD
+(Chinese)
+Table 2: Existing related large-scale datasets applicable to dialogue systems. Note that ’-’ represents the number is not
+mentioned in related papers.
+duplicated the raw data, desensitized and anonymized pri-
+vate information (e.g. replacing all numbers with special
+token <NUM>, and replacing order IDs with <ORDER-
+ID>). Then, we adopt Jieba 2 toolkit to perform Chinese
+word segmentation. We also count tokens, sessions and the
+average dialogue turns to give a brief view of the dataset.
+From Table 3, we can see that the JDDC dataset contains
+1,024,196 multi-turn sessions and 20,451,337 utterances
+totally. Besides, the number of turns for each session ranges
+from 2 to 83 with an average of 20. And the average tokens
+per utterance is about 7.4. Figure 1 demonstrates the his-
+togram of dialogue lengths in the dataset. For space limita-
+tion, we only show the dialogues whose turns are less than
+50. We can see that, most conversions are between 9 to
+30 turns and sessions of 14 turns have the largest portion.
+This indicates that long-term dependency among context is
+a distinctive feature in the JDDC dataset.
+Total sessions 1,024,196
+Total utterance 20,451,337
+Total words 150,716,172
+Average words per utterance 7.4
+Average turns per session 20
+Max turns 83
+Min turns 2
+Table 3: Basic statistics of JDDC dataset.
+3.2. Intent Distribution
+Different from open-domain chit-chat or task-oriented dia-
+logue (e.g. booking restaurants or ﬂight tickets), conversa-
+2https://github.com/fxsjy/jieba
+Figure 1: Histogram of dialogue turns in JDDC dataset.
+tions in E-commerce after-sales scenario usually have ex-
+plicit goals, which can be returning product, changing de-
+livery address, or simply inquiring the warranty policy etc.
+So knowing the goals is important for modeling this dia-
+logue task. To facilitate the research in the future, we label
+the intent for each query in all dialogues with a high-quality
+in-house intent classiﬁer. The classiﬁer contains totally 289
+intents, and it’s trained with Hierarchical Attention Net-
+work (Yang et al., 2016) model so context is also consid-
+ered. The training data for the classiﬁer includes totally
+578,127 instances and all the training instances are anno-
+tated by professional customer service staffs. The classiﬁ-
+cation accuracy reaches 93%, so the predicted intents for
+the JDDC dataset are reliable.
+Figure 2 gives the distribution of top 20 intents. The top ﬁve
+intents are: ‘Warranty and return policy’, ‘Delivery dura-
+tion’, ‘Change order information’, ‘Check order status’ and
+‘Contact customer service’. Among them, ‘Warranty and
+462
+return policy’ accounts for 9.2%, which is the most com-
+mon intent in after-sales circumstance. This distribution is
+also consistent with our real experience in E-commerce sce-
+nario that people often concern about warranty and delivery
+cycle, and ask for changing or returning the product.
+Figure 2: Distribution of intents in JDDC dataset.
+3.3. Challenge Set
+To promote the research of human-machine dialogue sys-
+tems with massive data in real scenario, we also held
+large-scale multi-turn dialogue competition with the JDDC
+dataset, namely, JingDong Dialogue Chanllenge 3 in 2018
+and 2019. Aiming to fully evaluate the dialogue systems
+submitted in the competitions, we released 3 challenge sets
+with different input information, and also annotated multi-
+ple ground-truth answers for each task. To further clarify
+these challenge sets, diagrams shown in Figure 3 illustrate
+the difference between 3 tasks.
+Figure 3: The explanation of our 3 challenge sets. The
+responses (r) in red color are required to be answered by
+the dialogue system.
+Challenge Set I , the dialogue system is required to out-
+put the ﬁnal response ri+1 by utilizing multi-turn dialogue
+context in the format of {q1, r1, q2, r2, ..., qi+1}, where q
+represents question and r means response. This task is de-
+signed for long context modeling. Totally 300 dialogues
+3http://jddc.jd.com/
+are annotated, and 300 questions need to be answered in
+this set.
+Challenge Set II, we mask the answers of a multi-turn con-
+versation as{q1, q2, ..., qi+1}, and the dialogue system is
+required to generate answers{r1, r2, ..., ri+1} according to
+sequential questions. Particularly, this requires considering
+not only the input question but also the generated responses
+in previous turns. This task is more challenging than the
+previous one because incorrect replies may mislead the next
+output. Totally 15 dialogues are annotated with 168 ques-
+tions to be answered in this set.
+Challenge Set III , we combine the characteristics of the
+former two tasks, for which the model needs to generate
+the response{ri, ri+1} sequentially under circumstance of
+several rounds of dialogue context and sequential questions
+{q1, r1, q2, r2, ..., qi, qi+1}. The questions here are mainly
+long-tailed and hard questions compared with Challenge
+Set I and II. Totally 108 dialogues are annotated and 500
+questions need to be answered in this set.
+In order to assess the answers generated by dialogue sys-
+tem, for each question, we annotated several candidate an-
+swers (10 candidate answers for Challenge Set I and II, and
+3 for Challenge Set III), as for dialogue task, the ground-
+truth is usually not limited to one. What’s more, different
+weights are provided for each candidate answer, so eval-
+uation metrics (e.g., BLEU score) can be calculated more
+accurately. We hope these 3 challenge sets can help evalu-
+ate the dialogue systems on a ﬁne-grained level.
+4. Experiments
+In this section, we conduct experiments on the JDDC
+dataset. We focus on two categories of models used in data-
+driven dialogue systems: retrieval-based models based on
+BM25 and BERT (Devlin et al., 2019) and generative mod-
+els (Gu et al., 2016). We will introduce some empirical
+settings, including dataset preparation, baseline methods,
+parameter settings. Then we introduce the experimental re-
+sults on this dataset.
+4.1. Experimental Setup
+We ﬁrst divide the around 1 million conversation ses-
+sions into training, validation and testing set. Then we
+construct I-R pairs from each set into the {I, R} =
+{q1, r1, q2, r2, Q, R} format, where I ={C, Q} stands for
+input, C ={q1, r1, q2, r2} is the dialogue context and Q
+represents the last query. So the most recent two rounds
+of dialogue are kept as context. We also ﬁltered some too
+short/long dialogues during experiment preparation. The
+statistics of the pre-processed dataset for experiment are
+shown in Table 4.
+Train Valid Test
+Sessions 963,358 4,992 4,992
+I-R Pairs 1,522,859 5,000 5,000
+Table 4: JDDC dataset division in experiments.
+For retrieval-based models, the original I-R pairs in the
+training set are labelled as positive and negative responses
+463
+are selected randomly from the dataset. The ratio of posi-
+tive and negative sample is 1:1. Then the constructed posi-
+tive and negative I-R pairs are used to ﬁne-tune the BERT
+model. Our model implementation for BERT is based on
+Google’s work (Devlin et al., 2019) and follows the hyper-
+parameter settings in the original model.
+For generative models, we ﬁrst clean the training set to de-
+crease the portion of short responses (shorter than 3 Chi-
+nese characters) and generic responses (e.g., “What else
+can I do for you?”). Then all remaining I-R pairs are used
+for training the model. Our code implementation is based
+on the machine translation toolkit OpenNMT (Klein et al.,
+2017). In all generative experiments, we set 100,000 for
+vocabulary size and 200 for word embedding dimension.
+The source length is 128 and target length is decreased to
+40 to avoid generating too long response. Other training
+parameters are set as default.
+4.2. Comparable Models
+In this subsection, we will introduce the detailed informa-
+tion on retrieval-based models and generative models used
+for our experiment.
+4.2.1. Retrieval-based Models
+BM25 To make the retrieval baseline more efﬁcient, we
+ﬁrstly index all the Input-Response pairs in the training set
+using ElasticSearch 4. Then we use BM25 to retrieve the
+top 20 candidates for further matching. Response from top
+1 candidate is used for evaluation. The equation of BM25
+is deﬁned as:
+S(Itest, Idoc) =
+n∑
+i
+Wi· S1(wi, Idoc)· S2(wi, Itest) (1)
+where Itest stands for the test input including context C
+and query Q, wi is the i-th word in the Itest, Idoc is the
+document input in the repository, Wi represents the weight
+of wi (such as inverse document frequency), and S(·) cal-
+culates the relevance score of the two elements. Therefore,
+S(Itest, Idoc) is the similarity score between the test input
+and the existing I-R pairs in the repository.
+BERT-Retrieval The retrieval method above only use one
+lexical feature to calculate the similarity. To capture more
+semantic information, we ﬁne-tune the pre-trained BERT
+model (Devlin et al., 2019) and add a dense layer with soft-
+max as classiﬁer to get the semantic similarity score for
+every (Itest, Rdoc) pair. Then we use the BERT score to re-
+rank the top 20 candidates from ElasticSearch and return
+the ﬁnal top 1.
+4.2.2. Generative Models
+Vanilla Seq2Seq We implement the vanilla Sequence-to-
+Sequence (Seq2Seq) model (Shang et al., 2015b) with 512-
+unit 4-layer Bi-LSTMs for both the encoder and decoder.
+The input is the concatenated context and query, while the
+output is the response.
+Attention-based Seq2Seq To improve our baseline, we
+applied attention mechanism (Luong et al., 2015) in the
+4https://www.elastic.co/products/
+elasticsearch
+Seq2Seq model. This model is regarded as our second base-
+line and referred as Seq2Seq-Attention.
+Attention-based Seq2Seq with Copy The context-query
+input is usually long and contains a lot of rare terminologies
+like “京东白条” (Jing Dong IOU(I owe you)), which may
+be OOV (out of vocabulary) words. Therefore, we add the
+copy mechanism (Gu et al., 2016) to the attention-based
+Seq2Seq baseline (Seq2Seq-Copy). The copy mechanism
+can explicitly extract words or phrases like certain entities
+from the input.
+4.3. Evaluation Measures
+In order to provide comparable baseline results for future
+research, we use some quantitative metrics for automatic
+evaluation. BLEU and ROUGE scores, which are widely
+used in NLP and multi-turn dialogue generation tasks (Tian
+et al., 2017; Luo et al., 2018; Shen et al., 2019), are used to
+measure the quality of generated responses via the compar-
+ison with the ground truths. The recently proposed Distinct
+(Distinct-1/2) (Li et al., 2016), is used to evaluate the degree
+of diversity by calculating the ratio of unique unigrams and
+bigrams in the generated responses.
+4.4. Experimental Results
+In this section, we analyze different baselines’ performance
+based on automatic evaluation measures and present in-
+depth case study.
+4.4.1. Automatic Evaluation Results
+BLEU Rouge-L Dist-1 Dist-2
+BM25 9.94 19.47 5.03 % 28.89%
+BERT-
+Retrieval 10.27 19.90 5.23% 30.85%
+Vanilla
+Seq2Seq 9.02 17.11 1.49 % 4.25%
+Seq2Seq-
+Attention 14.15 22.17 1.79 % 6.31%
+Seq2Seq-
+Copy 14.27 23.62 1.79% 6.14%
+Table 5: Automatic evaluation results. Dist-1/2 stands for
+Distinct-1/2.
+The results of automatic evaluation are shown in Table 5.
+To further study the responses given by these models, we
+conduct some statistical analysis on the result sets. In Table
+6, we present the response diversity (the portion of unique
+responses) in the Ground Truth set, BERT-Retrieval result
+set, and Seq2Seq-Copy result set. The portions of top three
+most common responses in the result sets are also listed
+in the table. Our observations can be summarized are as
+follows:
+1. For retrieval-based models, BERT-Retrieval outper-
+forms BM25, which shows the strong ability of pre-
+trained model in semantic matching task. For genera-
+tive models, Seq2Seq-Copy performs the best, which
+shows the effectiveness of using attention and copy
+mechanism.
+464
+Ground Truth BERT-Retrieval Seq2Seq-Copy
+Response Diversity 88.74% 93.63% 28.08%
+“Yes” 4.10% 0.94% 3.74%
+“What else can I do for you?” 3.42% 0.88% 24.48%
+“Wait a moment, I’ll check for you right away” 0.50% 0.18% 3.90%
+Table 6: Response diversity statistics and percentage of generic responses.
+Example 1
+q1 你好 (Hi)
+r1 你好 (Hi)
+q2 帮我查下这个商品 (Please check this item for me)
+r2 好的，请问有什么可以帮您 (Ok, what can I do for you?)
+Q 我要换这个摄像机，我这个上面绑定的账号能不能换绑？ (I want to change this camera, may I change the
+bound account on this either?)
+BERT-Retrieval 这个摄像机没有储存卡就不能回放。 (You can’t play back the video on the camera if you don’t have the
+SSD.)
+Seq2Seq-Copy 可以的哦。 (Yes, it’s ok.)
+Example 2
+q1 电子发票报销方便吗？ (Is it convenient to reimburse with electronic invoice?)
+r1 方便的，电子发票也是一样的 (Yes, electronic invoice is the same.)
+q2 稍等我问问会计 (Wait a moment for me to ask the accountant.)
+r2 好的 (No problem.)
+Q 那就开电子票吧 (Ok, send me electronic invoice please.)
+BERT-Retrieval 好的，请问您税号多少呢？ (Ok, what’s your tax number please?)
+Seq2Seq-Copy 好的，请问还有其他可以帮到您的吗？ (Ok, what else can I do for you?)
+Table 7: Examples of case study.
+2. The generative model has better performance in the
+similarity metrics (BLEU and Rouge-L) with the
+ground truth. There are mainly two reasons. One
+reason is generative model can generate new answers
+while retrieval models are limited by the I-R pair
+repository. The other possible reason is that the
+ground truth also has many general responses (shown
+in Table 6), while the retrieval model tends to give
+responses containing speciﬁc information which may
+not ﬁt the context and are quite different from the
+ground truth.
+3. The retrieval-based model performs much better in re-
+sponse diversity (Dist-1/2 in Table 5 and the response
+diversity in Table 6). While the performance of the
+generative model is very poor since it prefers to gen-
+erate similar generic responses repeatedly (shown in
+Table 6), which is the common disadvantage of the
+generative models (Li et al., 2016).
+4.4.2. Case Study
+We also show two representative cases in Table 7 to illus-
+trate the difference between the two approaches intuitively.
+The retrieval model fails in the ﬁrst case because it gives
+wrong information (talking about the “SSD”, not the ac-
+count), and the generative model fails in the second case
+for giving a generic response rather than useful informa-
+tion. From the cases above, we can see that the retrieval
+model tends to give responses with speciﬁc information
+(like “SSD” and “tax number”), while the generative model
+usually gives generic answers (such as “yes” or “what else
+can I do for you”).
+For the frequently asked questions like invoice-editing,
+order-cancellation, etc., the retrieval model can perform
+well. However, For some speciﬁc questions which may
+never appear in the repository, the retrieval model may give
+a wrong answer, even though they contain the correct en-
+tities. For generative models, the generated generic re-
+sponses may be lack of information, but they rarely make
+mistakes. Even not that satisﬁed, the users can still accept
+the generic responses sometimes. In general, both retrieval
+and generative models above are still not good enough.
+This shows the task complexity in the JDDC corpus.
+5. Conclusions and Future Work
+In this work, we construct the Chinese JDDC dataset which
+is large-scale, multi-turn and collected in real scenario. We
+contribute three high-quality human-annotated challenge
+sets for better evaluation. Over 200 intents are also labelled
+for each query in the dataset. Besides, We evaluate sev-
+eral mainstream models on this dataset. The experimen-
+tal results indicate either retrieval or generative models still
+have a long way to go in order to solve the real scenario
+conversation problem. More in-depth researches on con-
+text modeling, controllable response generation, question
+and answering, and reinforcement learning are needed in
+the future. Moreover, we will enrich the dataset annota-
+tions (e.g., emotions, and external knowledge) from var-
+ious aspects in future work. Our dataset is available at:
+https://jddc.jd.com/, and we hope it can serve as
+an effective testbed and beneﬁt future research in dialogue
+systems.
+465
+6. Acknowledgements
+This work is partially supported by Beijing Academy of
+Artiﬁcial Intelligence (BAAI).
+7. Bibliographical References
+Al-Rfou, R., Pickett, M., Snaider, J., Sung, Y .-h., Strope,
+B., and Kurzweil, R. (2016). Conversational contex-
+tual cues: The case of personalization and history for
+response ranking. arXiv preprint arXiv:1606.00372.
+Allen, J. F., Miller, B. W., Ringger, E. K., and Sikorski, T.
+(1996). A robust system for natural spoken dialogue. In
+Proceedings of the 34th annual meeting on Association
+for Computational Linguistics, pages 62–70. Association
+for Computational Linguistics.
+Bordes, A., Boureau, Y .-L., and Weston, J. (2016). Learn-
+ing end-to-end goal-oriented dialog. arXiv preprint
+arXiv:1605.07683.
+Budzianowski, P., Wen, T.-H., Tseng, B.-H., Casanueva,
+I., Ultes, S., Ramadan, O., and Gasic, M. (2018).
+Multiwoz-a large-scale multi-domain wizard-of-oz
+dataset for task-oriented dialogue modelling. In Pro-
+ceedings of the 2018 Conference on Empirical Methods
+in Natural Language Processing, pages 5016–5026.
+Danescu-Niculescu-Mizil, C. and Lee, L. (2011).
+Chameleons in imagined conversations: A new approach
+to understanding coordination of linguistic style in di-
+alogs. In Proceedings of the 2nd workshop on cogni-
+tive modeling and computational linguistics , pages 76–
+87. Association for Computational Linguistics.
+Devlin, J., Chang, M.-W., Lee, K., and Toutanova, K.
+(2019). Bert: Pre-training of deep bidirectional trans-
+formers for language understanding. In Proceedings of
+the 2019 Conference of the North American Chapter of
+the Association for Computational Linguistics: Human
+Language Technologies, V olume 1 (Long and Short Pa-
+pers), pages 4171–4186.
+Dodge, J., Gane, A., Zhang, X., Bordes, A., Chopra, S.,
+Miller, A., Szlam, A., and Weston, J. (2015). Evaluat-
+ing prerequisite qualities for learning end-to-end dialog
+systems. arXiv preprint arXiv:1511.06931.
+El Asri, L., Schulz, H., Sharma, S., Zumer, J., Harris, J.,
+Fine, E., Mehrotra, R., and Suleman, K. (2017). Frames:
+a corpus for adding memory to goal-oriented dialogue
+systems. In Proceedings of the 18th Annual SIGdial
+Meeting on Discourse and Dialogue , pages 207–219.
+Gu, J., Lu, Z., Li, H., and Li, V . O. (2016). Incorporat-
+ing copying mechanism in sequence-to-sequence learn-
+ing. arXiv preprint arXiv:1603.06393.
+Kelley, J. F. (1984). An iterative design methodology for
+user-friendly natural language ofﬁce information appli-
+cations. ACM Trans. Inf. Syst., 2(1):26–41, January.
+Klein, G., Kim, Y ., Deng, Y ., Senellart, J., and Rush, A. M.
+(2017). Opennmt: Open-source toolkit for neural ma-
+chine translation. arXiv preprint arXiv:1701.02810.
+Li, J., Galley, M., Brockett, C., Gao, J., and Dolan, B.
+(2016). A diversity-promoting objective function for
+neural conversation models. In Proceedings of NAACL-
+HLT, pages 110–119.
+Li, J., Song, Y ., Zhang, H., and Shi, S. (2018). A manually
+annotated chinese corpus for non-task-oriented dialogue
+systems. arXiv preprint arXiv:1805.05542.
+Lowe, R., Pow, N., Serban, I., and Pineau, J. (2015). The
+ubuntu dialogue corpus: A large dataset for research in
+unstructured multi-turn dialogue systems. In Proceed-
+ings of the 16th Annual Meeting of the Special Interest
+Group on Discourse and Dialogue , pages 285–294.
+Luo, L., Xu, J., Lin, J., Zeng, Q., and Sun, X. (2018).
+An auto-encoder matching model for learning utterance-
+level semantic dependency in dialogue generation. In
+Proceedings of the 2018 Conference on Empirical Meth-
+ods in Natural Language Processing, pages 702–707.
+Luong, T., Pham, H., and Manning, C. D. (2015). Effec-
+tive approaches to attention-based neural machine trans-
+lation. In Proceedings of the 2015 Conference on Em-
+pirical Methods in Natural Language Processing , pages
+1412–1421, Lisbon, Portugal, September. Association
+for Computational Linguistics.
+Petukhova, V ., Gropp, M., Klakow, D., Schmidt, A., Eigner,
+G., Topf, M., Srb, S., Motlicek, P., Potard, B., Dines,
+J., et al. (2014). The dbox corpus collection of spo-
+ken human-human and human-machine dialogues. In
+Proceedings of the Ninth International Conference on
+Language Resources and Evaluation (LREC’14) , num-
+ber CONF. European Language Resources Association
+(ELRA).
+Rastogi, A., Zang, X., Sunkara, S., Gupta, R., and Khai-
+tan, P. (2019). Towards scalable multi-domain conver-
+sational agents: The schema-guided dialogue dataset.
+arXiv preprint arXiv:1909.05855.
+Ritter, A., Cherry, C., and Dolan, W. B. (2010). Unsuper-
+vised modeling of twitter conversations. In Human Lan-
+guage Technologies: Conference of the North American
+Chapter of the Association of Computational Linguistics,
+Proceedings, June 2-4, 2010, Los Angeles, California,
+USA, pages 172–180.
+Ritter, A., Cherry, C., and Dolan, W. B. (2011). Data-
+driven response generation in social media. In Proceed-
+ings of the conference on empirical methods in natu-
+ral language processing, pages 583–593. Association for
+Computational Linguistics.
+Shah, P., Hakkani-T ¨ur, D., T ¨ur, G., Rastogi, A., Bapna,
+A., Nayak, N., and Heck, L. (2018). Building a conver-
+sational agent overnight with dialogue self-play. arXiv
+preprint arXiv:1801.04871.
+Shang, L., Lu, Z., and Li, H. (2015a). Neural responding
+machine for short-text conversation. In Proceedings of
+the 53rd Annual Meeting of the Association for Com-
+putational Linguistics and the 7th International Joint
+Conference on Natural Language Processing (V olume 1:
+Long Papers), pages 1577–1586.
+Shang, L., Lu, Z., and Li, H. (2015b). Neural respond-
+ing machine for short-text conversation. In Proceedings
+of the 53rd Annual Meeting of the Association for Com-
+putational Linguistics and the 7th International Joint
+Conference on Natural Language Processing (V olume 1:
+Long Papers), pages 1577–1586, Beijing, China, July.
+Association for Computational Linguistics.
+466
+Shen, L., Feng, Y ., and Zhan, H. (2019). Modeling seman-
+tic relationship in multi-turn conversations with hierar-
+chical latent variables. In Proceedings of the 57th An-
+nual Meeting of the Association for Computational Lin-
+guistics, pages 5497–5502.
+Tian, Z., Yan, R., Mou, L., Song, Y ., Feng, Y ., and Zhao, D.
+(2017). How to make context more useful? an empiri-
+cal study on context-aware neural conversational models.
+In Proceedings of the 55th Annual Meeting of the Asso-
+ciation for Computational Linguistics (V olume 2: Short
+Papers), pages 231–236.
+Tiedemann, J. (2009). News from opus-a collection of
+multilingual parallel corpora with tools and interfaces.
+In Recent advances in natural language processing , vol-
+ume 5, pages 237–248.
+Turing, A. M. (2009). Computing machinery and in-
+telligence. In Parsing the Turing Test , pages 23–65.
+Springer.
+Wang, H., Lu, Z., Li, H., and Chen, E. (2013). A dataset
+for research on short-text conversations. In Proceedings
+of the 2013 Conference on Empirical Methods in Natural
+Language Processing, pages 935–945.
+Wu, Y ., Wu, W., Xing, C., Zhou, M., and Li, Z. (2017).
+Sequential matching network: A new architecture for
+multi-turn response selection in retrieval-based chatbots.
+In Proceedings of the 55th Annual Meeting of the Asso-
+ciation for Computational Linguistics (V olume 1: Long
+Papers), pages 496–505.
+Wu, W., Guo, Z., Zhou, X., Wu, H., Zhang, X., Lian, R.,
+and Wang, H. (2019). Proactive human-machine conver-
+sation with explicit conversation goals. arXiv preprint
+arXiv:1906.05572.
+Yang, Z., Yang, D., Dyer, C., He, X., Smola, A., and Hovy,
+E. (2016). Hierarchical attention networks for document
+classiﬁcation. In Proceedings of the 2016 Conference of
+the North American Chapter of the Association for Com-
+putational Linguistics: Human Language Technologies ,
+pages 1480–1489, San Diego, California, June. Associa-
+tion for Computational Linguistics.
+Zhang, S., Dinan, E., Urbanek, J., Szlam, A., Kiela, D.,
+and Weston, J. (2018a). Personalizing dialogue agents:
+I have a dog, do you have pets too? In Proceedings of
+the 56th Annual Meeting of the Association for Computa-
+tional Linguistics (V olume 1: Long Papers), pages 2204–
+2213.
+Zhang, Z., Li, J., Zhu, P., Zhao, H., and Liu, G. (2018b).
+Modeling multi-turn conversation with deep utterance
+aggregation. In Proceedings of the 27th International
+Conference on Computational Linguistics , pages 3740–
+3752.

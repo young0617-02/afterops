@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-10-06 21:11:50",
+  "gate_f-001": "NOT_PASSED",
+  "gate_note": "论文可核对规模与许可，但数据文件不可直取：官方发放页被重定向到京东错误页、境内镜像检索为空、历史对象存储桶不存在（NoSuchBucket）、AI Challenger 平台域名本机不可解析。判定闸门未通过：需在人工获取语料后再执行 F-003 清洗与 F-002 标签全量核对。",
+  "data_candidates": [],
+  "probed_sources": [
+    "paper_lrec2020",
+    "paper_pdf",
+    "jddc_jd_com",
+    "jddc_oss_train",
+    "aichengxing",
+    "hf_jddc_search",
+    "hfmirror_jddc_search",
+    "modelscope_search"
+  ]
+}

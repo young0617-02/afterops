@@ -1,0 +1,213 @@
+name: afterops
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: afterops
+      POSTGRES_PASSWORD: afterops
+      POSTGRES_DB: afterops
+    ports:
+      - "5433:5432"
+    volumes:
+      - afterops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U afterops -d afterops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: dev
+      ADMIN_LOGIN_LIMIT: ${ADMIN_LOGIN_LIMIT:-200}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:8000,http://localhost:8000}
+      DATABASE_URL: postgresql+psycopg://afterops:afterops@postgres:5432/afterops
+      SESSION_SECRET: dev-only-change-me
+      MOCK_PSP_SECRET: dev-only-change-me
+      LLM_PROVIDER: ${LLM_PROVIDER:-template}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-60000}
+      EMAIL_NOTIFY_ENABLED: ${EMAIL_NOTIFY_ENABLED:-true}
+      CUSTOMER_EMAIL_NOTIFY_ENABLED: ${CUSTOMER_EMAIL_NOTIFY_ENABLED:-true}
+      ADMIN_BASE_URL: ${ADMIN_BASE_URL:-http://127.0.0.1:3000}
+      RETURN_ADDRESS: ${RETURN_ADDRESS:-上海市青浦区华新镇华志路 168 号 AfterOps 退货仓}
+      UPLOAD_DIR: /data/uploads
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-5242880}
+      LOW_STOCK_THRESHOLD: ${LOW_STOCK_THRESHOLD:-5}
+      AUDIT_ANCHOR_DIR: /data/anchors
+      AUDIT_ANCHOR_SECRET: dev-only-anchor-secret-change-me
+      LOG_FORMAT: json
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      OTEL_SERVICE_NAME: afterops-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/data/uploads
+      - anchors_data:/data/anchors:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\"",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    logging: *default-logging
+
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.worker.outbox"]
+    environment:
+      APP_ENV: dev
+      ADMIN_LOGIN_LIMIT: ${ADMIN_LOGIN_LIMIT:-200}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:8000,http://localhost:8000}
+      DATABASE_URL: postgresql+psycopg://afterops:afterops@postgres:5432/afterops
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-afterops@local}
+      EMAIL_NOTIFY_ENABLED: ${EMAIL_NOTIFY_ENABLED:-true}
+      CUSTOMER_EMAIL_NOTIFY_ENABLED: ${CUSTOMER_EMAIL_NOTIFY_ENABLED:-true}
+      OUTBOX_POLL_SECONDS: ${OUTBOX_POLL_SECONDS:-5}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
+      ORDER_AUTO_COMPLETE_DAYS: ${ORDER_AUTO_COMPLETE_DAYS:-7}
+      ORDER_AUTO_COMPLETE_INTERVAL_SECONDS: ${ORDER_AUTO_COMPLETE_INTERVAL_SECONDS:-3600}
+      ORDER_EXPIRE_INTERVAL_SECONDS: ${ORDER_EXPIRE_INTERVAL_SECONDS:-60}
+      PROPOSAL_SLA_MINUTES: ${PROPOSAL_SLA_MINUTES:-30}
+      HANDOFF_SLA_MINUTES: ${HANDOFF_SLA_MINUTES:-15}
+      HANDOFF_SLA_HIGH_MINUTES: ${HANDOFF_SLA_HIGH_MINUTES:-10}
+      HANDOFF_SLA_URGENT_MINUTES: ${HANDOFF_SLA_URGENT_MINUTES:-5}
+      HANDOFF_FIRST_RESPONSE_MINUTES: ${HANDOFF_FIRST_RESPONSE_MINUTES:-30}
+      HANDOFF_FIRST_RESPONSE_ESCALATION_MINUTES: ${HANDOFF_FIRST_RESPONSE_ESCALATION_MINUTES:-60}
+      SLA_REMINDER_INTERVAL_SECONDS: ${SLA_REMINDER_INTERVAL_SECONDS:-300}
+      AUDIT_ANCHOR_DIR: /data/anchors
+      AUDIT_ANCHOR_SECRET: dev-only-anchor-secret-change-me
+      AUDIT_ANCHOR_INTERVAL_SECONDS: ${AUDIT_ANCHOR_INTERVAL_SECONDS:-86400}
+    volumes:
+      - anchors_data:/data/anchors
+    depends_on:
+      api:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    logging: *default-logging
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: http://api:8000
+    environment:
+      API_BASE_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yml"]
+    ports:
+      - "127.0.0.1:3200:3200"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo.yml:ro
+      - tempo_data:/var/tempo
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
+      alertmanager:
+        condition: service_started
+    logging: *default-logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.2
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    depends_on:
+      mailpit:
+        condition: service_started
+    logging: *default-logging
+
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+    logging: *default-logging
+
+  alert-sink:
+    build:
+      context: ./alertsink
+    ports:
+      - "127.0.0.1:18080:8080"
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - tempo
+    logging: *default-logging
+
+volumes:
+  afterops_pgdata:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  tempo_data:
+  uploads_data:
+  anchors_data:
