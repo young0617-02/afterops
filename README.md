@@ -1,207 +1,362 @@
 # AfterOps · AI 售后运营台
 
-> 当前主线（2026-11 起）：面向 3C 配件的售后运营台——完整交易底座（商品/库存/支付/履约/售后）+ AI 只查事实/只提案 + 店主审批/人工工单 + 哈希链审计。
-> 全栈入口：`docker compose -f infra/docker-compose.yml up -d --build` → web `http://127.0.0.1:3000` / api `http://127.0.0.1:8000`。
-> 观测入口：Prometheus `http://127.0.0.1:9090` / Alertmanager `http://127.0.0.1:9093` / 本地告警接收 `http://127.0.0.1:18080` / 邮件收件箱 Mailpit `http://127.0.0.1:8025` / Grafana `http://127.0.0.1:3001`（均仅回环；Grafana 本地 admin/admin，匿名 Viewer；Grafana 内已接 Tempo 追踪，按 trace ID 查询）。
-> 产品文档：[PRD v0](docs/product/PRD-v0.md) · [90 天路线](docs/product/90-day-roadmap.md) · [ADR-0001](docs/adr/0001-product-scope-and-stack.md) · [项目地图](项目地图.md)
-> 本地管理员：`owner@afterops.local` / `DEMO_OWNER_PASSWORD`（默认 `owner123456`）；客服：`agent@afterops.local` / `DEMO_AGENT_PASSWORD`（默认 `agent123456`，可查看提案、接管人工工单，不能审批资金/地址）；本地 OTP 验证码在登录框旁显示，生产不返回。
-> 当前边界：mock PSP、默认模板 AI（Ollama `qwen2.5:7b` 已实测，可切 openai）、OTP debug_code、物流为商家手工录入运单/节点、客服与顾客邮件均走本地 Mailpit；未接真实短信/支付/承运商 API。
+## 项目简介
 
-## 快速开始
+面向单店 3C 配件的售后运营台：完整交易底座（商品 / 库存 / 支付 / 履约 / 售后）+ 事实型 AI 客服 + 店主审批与人工工单 + 哈希链审计。
+
+- AI 只查事实、只提案：退款、补偿、改地址等写操作一律生成待审提案，由店主在后台批准后执行。
+- 资金与库存数字全部由数据库/SQL 产出；AI 回复中出现的金额、状态必须可溯源。
+- 每个业务事件写入按商家隔离的哈希链审计，worker 定期写 HMAC 签名锚点，可在线校验。
+
+当前边界：支付为 mock PSP；顾客登录 OTP 在非生产环境返回 `debug_code`；物流节点由商家手工推进；客服与顾客邮件走本地 Mailpit；默认 AI 为确定性模板，可切换到 Ollama 或 OpenAI 兼容端点。未接入真实短信、支付、承运商 API。
+
+> 仓库同时保留了 2026-10 的旧原型（根目录 `src/`、`tests/`、`evals/`、`ops/`），见 [旧原型（legacy）](#旧原型legacy)。
+
+## 目录
+
+- [核心功能](#核心功能)
+- [技术栈与架构](#技术栈与架构)
+- [目录结构](#目录结构)
+- [安装与运行](#安装与运行)
+- [主要配置](#主要配置)
+- [使用示例](#使用示例)
+- [测试方式](#测试方式)
+- [数据、许可与安全](#数据许可与安全)
+- [旧原型（legacy）](#旧原型legacy)
+- [贡献说明](#贡献说明)
+- [文档索引](#文档索引)
+- [已知边界](#已知边界)
+
+## 核心功能
+
+### 店面与交易
+
+- 商品目录、分类、搜索、详情页（主图 + 详情图、评分、评论、保修期展示）。
+- 购物车、优惠券（固定金额 / 百分比、全场 / 类目 / SKU 范围）、配送方式与运费规则、结算。
+- 模拟支付（mock PSP）与支付回调；订单查询、整单取消、发票申请、地址簿。
+- 已签收订单的商品评价（文字 + 最多 3 张图片），商家可回复、隐藏 / 恢复。
+
+### 售后
+
+- 退货：按件部分退货、退货资格校验（类目窗口 / 禁退类目）、回寄物流时间线、逐件质检处置（回补库存 / 报损）。
+- 换货：同款或跨 SKU 换货，按件汇总差价生成退款提案。
+- 维修：按商品保修期申请，店主报价、批准、收货、完成。
+- 退款与补偿：顾客申请生成提案；店主也可为电话 / 线下顾客发起退款、补偿、改地址提案，全部走审批后执行。
+- 顾客可分别关闭发货 / 售后 / 退货三类邮件通知。
+
+### AI 客服
+
+- 只读工具查询订单、物流、售后、退款、维修、发票、商品与政策，回答基于数据库事实。
+- 高风险输入（退款、赔偿、投诉、价保等）只解释规则并转人工，不作承诺；输出侧再做承诺短语复核。
+- 写操作只生成待审提案，AI 不直接执行退款或改地址。
+- 顾客聊天支持 SSE 实时消息、最多 3 张图片附件；人工接管后 AI 暂停自动答复。
+- Provider 可切换：`template`（默认、确定性）/ `ollama` / `openai`，模型只允许改写已批准的回复。
+
+### 后台
+
+- 概览、商品与图片、库存（导入 / 流水 / 对账 / 盘点 / 仓库调拨）、订单与履约、财务对账、客户目录。
+- 提案审批、人工工单（接管 / 指派 / 解决 / 内部备注 / 顾客评价）、快捷回复、政策库。
+- 团队与坐席绩效、自动分配、SLA 提醒与升级、邮件 outbox 重试。
+- 评价管理、退货分析、维修与发票管理。
+- 审计链查看 / 导出 / 校验，HMAC 锚点管理。
+
+### 审计与可观测
+
+- 每个商家一条审计哈希链，可校验、可导出；worker 定期把链头写入独立卷并做 HMAC 签名。
+- `/metrics` 暴露请求指标；可选 OpenTelemetry 追踪接入 Tempo。
+- 开发栈内置 Prometheus、Alertmanager、Grafana、Tempo、Mailpit 与本地告警接收器。
+
+## 技术栈与架构
+
+| 层 | 技术 |
+|---|---|
+| 后端 | Python 3.12、FastAPI、SQLAlchemy 2、Alembic、PostgreSQL 16、Pydantic Settings、argon2-cffi、OpenTelemetry |
+| 前端 | Next.js 16、React 19、TypeScript；Playwright（E2E） |
+| 测试 | pytest、httpx、ruff |
+| 基础设施 | Docker Compose；Prometheus、Alertmanager、Grafana、Tempo、Mailpit、alert-sink |
+
+请求路径：
+
+```
+浏览器 (Next.js :3000)
+  ├─ /api/* 由 next.config.mjs 反代到 API (:8000)
+  └─ 后台 /admin、店面 /product/[sku]、购物车、订单、售后、账户、地址、优惠券、帮助中心
+        ↓
+FastAPI (:8000)
+  ├─ /api/store/*  顾客侧接口（OTP 登录、目录、购物车、结算、订单、售后、维修、发票、评价、帮助）
+  ├─ /api/admin/*  店主 / 客服接口（提案审批、工单、库存、财务、审计、团队等）
+  ├─ /api/chat     会话与 SSE 流
+  └─ /health、/health/ready、/metrics、/docs
+        ↓
+PostgreSQL 16（交易、售后、审计）
+        ↑
+worker（app.worker.outbox）：邮件出站、SLA 提醒、订单超时释放、审计锚点
+```
+
+AI 调用链：用户消息 → 高风险识别 → 只读工具取事实 → 模板或模型改写 → 承诺短语复核 → 提案 / 转人工 → 写审计。
+
+## 目录结构
+
+```
+backend/            FastAPI 应用
+  app/api/          顾客与后台 HTTP 路由（/api/store、/api/admin、/api/chat）
+  app/services/     业务服务（结算、售后、审计、提案、工单、通知等）
+  app/domain/       SQLAlchemy 模型与金额工具
+  app/ai/           意图、只读工具、Guardrails、Provider、聊天编排
+  app/worker/       outbox worker
+  app/scripts/      seed、task_eval、verify_audit、backup_drill、压测等
+  alembic/          数据库迁移
+  tests/            pytest 用例（内存 SQLite fixture，无需外部服务）
+frontend/           Next.js 16 店面与后台
+  app/              页面路由（店面、购物车、订单、售后、账户、地址、优惠券、帮助、/admin）
+  components/       后台面板、聊天窗、通知等组件
+  lib/              API 客户端、类型、状态映射
+  e2e/              Playwright 用例
+infra/              开发 / 生产 Compose，Prometheus、Alertmanager、Grafana、Tempo、Mailpit、alert-sink
+docs/               产品文档（product/）、ADR、部署手册与旧原型文档
+data/               合成店铺 SQL、意图 / 门禁词表、JDDC 取证（不含原始语料）
+reports/            各功能验证记录与评测输出
+src/ tests/ evals/ ops/ scripts/   旧原型（legacy），与当前全栈并存
+项目地图.md / 交付总结.md / 项目方案-*.md   历史盘点与方案文档
+```
+
+## 安装与运行
+
+### 环境要求
+
+以下命令默认在仓库根目录执行。
+
+- Docker Engine / Docker Desktop + Compose v2（全栈与生产部署）。
+- 本机开发：Python 3.12 + [uv](https://docs.astral.sh/uv/)、Node 24 + npm（与 `backend/Dockerfile`、`frontend/Dockerfile` 一致）。
+- 前端 E2E 使用 Playwright 的 `msedge` 通道，需要本机安装 Microsoft Edge。
+
+### 全栈启动（开发）
 
 ```bash
-# 全栈（web + api + worker + postgres + 观测栈）
 docker compose -f infra/docker-compose.yml up -d --build
+```
 
-# 生产部署（Caddy TLS，见 docs/deployment.md）
-# cp infra/.env.prod.example infra/.env.prod 并替换密钥后：
-# docker compose -p afterops-prod -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --build
+首次启动后数据库为空，需要导入合成演示数据（脚本从 SQLite 读取并写入 Postgres；默认连接 `127.0.0.1:5433`）：
 
-# 后端测试 / 任务级评测（需全栈已启动）
-(cd backend && uv run pytest -q)
-(cd backend && uv run python -m app.scripts.task_eval)
+```bash
+(cd backend && uv run python -m app.scripts.seed --reset)
+```
 
-# 可选：真实本地模型改写 smoke（需 Ollama 与对应模型）
-(cd backend && LLM_PROVIDER=ollama OLLAMA_MODEL=qwen2.5:7b uv run python -m app.scripts.llm_smoke)
+主要入口：
 
-# 前端类型检查 / E2E（需全栈已启动）
-(cd frontend && npm install && npm run typecheck)
-(cd frontend && npm run test:e2e)
+| 服务 | 地址 |
+|---|---|
+| 店面 / 后台 | `http://127.0.0.1:3000`（后台 `/admin`） |
+| API / Swagger | `http://127.0.0.1:8000`、`http://127.0.0.1:8000/docs` |
+| PostgreSQL | `127.0.0.1:5433`（容器内 5432） |
+| Prometheus | `http://127.0.0.1:9090` |
+| Alertmanager | `http://127.0.0.1:9093` |
+| Grafana | `http://127.0.0.1:3001`（本地 `admin/admin`，匿名 Viewer） |
+| Mailpit（邮件收件箱 / SMTP） | `http://127.0.0.1:8025`、`127.0.0.1:1025` |
+| 本地告警接收 | `http://127.0.0.1:18080/alerts` |
+| Tempo | `127.0.0.1:3200`（查询）、`127.0.0.1:4318`（OTLP） |
 
-# 备份恢复演练 / 轻量读压测
-(cd backend && uv run python -m app.scripts.backup_drill)
+查看日志与停止：
+
+```bash
+docker compose -f infra/docker-compose.yml logs -f api
+docker compose -f infra/docker-compose.yml down
+```
+
+### 本机开发（前后端不用容器）
+
+```bash
+# 1. 只起 Postgres
+docker compose -f infra/docker-compose.yml up -d postgres
+
+# 2. 后端
+cd backend
+cp .env.example .env
+uv sync
+uv run alembic upgrade head
+uv run python -m app.scripts.seed --reset
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# 3. 前端（新终端，在仓库根目录）
+cd frontend
+npm install
+npm run dev          # http://127.0.0.1:3000，/api 反代到 127.0.0.1:8000
+```
+
+容器入口会自动执行 `alembic upgrade head`；本机启动需要手动执行迁移。
+
+### 生产部署
+
+```bash
+cp infra/.env.prod.example infra/.env.prod   # 替换全部密码与密钥
+docker compose -p afterops-prod \
+  -f infra/docker-compose.prod.yml \
+  --env-file infra/.env.prod up -d --build
+```
+
+生产栈使用 Caddy 提供 TLS，包含 `postgres`、`api`、`worker`、`web`、`backup`、`mailpit`、`caddy`；可选观测栈见 [docs/deployment.md](docs/deployment.md)。生产库不执行演示 seed，真实数据应通过商品 / 库存 / 订单接入流程导入。
+
+## 主要配置
+
+后端配置入口为 `backend/.env.example`（复制为 `backend/.env`）；根目录 `.env.example` 属于旧原型，与全栈后端无关。
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `APP_ENV` | `dev` | `prod` 时 OTP 不返回 `debug_code`，Cookie 加 `Secure` |
+| `DATABASE_URL` | `postgresql+psycopg://afterops:afterops@127.0.0.1:5433/afterops` | 本机默认指向 Compose 暴露的 Postgres |
+| `SESSION_SECRET` | `dev-only-change-me` | 会话签名密钥，生产必须替换 |
+| `MOCK_PSP_SECRET` | `dev-only-change-me` | 模拟支付回调签名密钥 |
+| `DEMO_OWNER_PASSWORD` / `DEMO_AGENT_PASSWORD` | `owner123456` / `agent123456` | seed 创建的店主 / 客服账号密码 |
+| `DEMO_MERCHANT_NAME` | `AfterOps 演示 3C 店` | 演示商家名；找不到时接口提示先运行 seed |
+| `LLM_PROVIDER` | `template` | `template` / `ollama` / `openai` |
+| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | `http://127.0.0.1:11434` / 空 | 本地模型配置 |
+| `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` | 空 | 任意 OpenAI 兼容 `/chat/completions` 端点 |
+| `LLM_TIMEOUT_MS` | `20000`（容器 `60000`） | 模型调用超时 |
+| `EMAIL_NOTIFY_ENABLED` / `CUSTOMER_EMAIL_NOTIFY_ENABLED` | `true` | 员工 / 顾客邮件通知开关 |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM` | `127.0.0.1` / `1025` / `afterops@local` | 本地默认指向 Mailpit |
+| `UPLOAD_DIR` / `UPLOAD_MAX_BYTES` | `uploads` / `5242880` | 附件存储与单文件上限（容器内为 `/data/uploads`） |
+| `OTP_TTL_SECONDS` / `OTP_MAX_ATTEMPTS` | `300` / `5` | 登录验证码有效期与尝试次数 |
+| `OTP_REQUEST_LIMIT` / `LOGIN_LIMIT` | `5` / `10` | 验证码与登录限流（窗口 600s） |
+| `CHAT_LIMIT` / `CHECKOUT_LIMIT` | `30` / `10` | 聊天与结算限流（窗口 60s） |
+| `ORDER_AUTO_COMPLETE_DAYS` | `7` | 订单自动完成天数 |
+| `PROPOSAL_SLA_MINUTES` / `HANDOFF_SLA_MINUTES` | `30` / `15` | 提案与工单 SLA |
+| `HANDOFF_SLA_HIGH_MINUTES` / `HANDOFF_SLA_URGENT_MINUTES` | `10` / `5` | 高优 / 紧急工单 SLA |
+| `AUDIT_ANCHOR_DIR` / `AUDIT_ANCHOR_SECRET` | `anchors` / `dev-only-anchor-secret-change-me` | 审计锚点目录与签名密钥 |
+| `AUDIT_ANCHOR_INTERVAL_SECONDS` | `86400` | 锚点写入间隔 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | 空 | 留空关闭追踪；容器内默认 `http://tempo:4318` |
+| `LOG_FORMAT` | `text` | `text` / `json` |
+
+前端：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `API_BASE_URL` | `http://127.0.0.1:8000` | `next.config.mjs` 把 `/api/*` 反代到该地址；Docker 构建时传 `http://api:8000` |
+| `PLAYWRIGHT_BASE_URL` | `http://127.0.0.1:3000` | E2E 目标地址 |
+
+生产配置见 `infra/.env.prod.example`：`SITE_ADDRESS`、`PUBLIC_BASE_URL`、`POSTGRES_PASSWORD`、`SESSION_SECRET`、`MOCK_PSP_SECRET`、`DEMO_OWNER_PASSWORD`、`DEMO_AGENT_PASSWORD`、`AUDIT_ANCHOR_SECRET`、`BACKUP_*` 等。
+
+## 使用示例
+
+### 店面与后台
+
+1. 打开 `http://127.0.0.1:3000`，浏览商品并加入购物车；结算时可使用优惠券与配送方式。
+2. 顾客登录：输入手机号 → 开发环境响应中带 `debug_code`，页面直接显示验证码 → 登录后可查看订单、售后、地址、优惠券与通知设置。
+3. 后台 `http://127.0.0.1:3000/admin`：
+   - 店主：`owner@afterops.local` / `owner123456`
+   - 客服：`agent@afterops.local` / `agent123456`（可查看 / 接管工单，不能审批资金与地址类提案）
+4. 在订单或聊天中发起退款 / 退货 / 换货 / 维修请求，到后台「提案」或「售后」列表审批推进。
+5. 打开右下角聊天窗提问，例如「订单 ORD-… 什么时候到」「这个 SKU 多少钱」；涉及退款、赔偿等问题时，AI 只解释规则并转人工或生成提案。
+
+### 接口示例
+
+```bash
+curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/health/ready
+curl -s http://127.0.0.1:8000/metrics | head
+curl -s http://127.0.0.1:8000/openapi.json | head -c 300
+
+# 请求登录验证码（开发环境返回 debug_code）
+curl -s -X POST http://127.0.0.1:8000/api/store/otp/request \
+  -H 'Content-Type: application/json' \
+  -d '{"phone":"13800000001"}'
+```
+
+带登录态的写请求需要同时携带会话 Cookie 与 CSRF 头，建议通过前端页面操作；接口清单见 `http://127.0.0.1:8000/docs`。
+
+### 运维脚本
+
+```bash
+(cd backend && uv run python -m app.scripts.verify_audit)        # 校验所有商家审计链
+(cd backend && uv run python -m app.scripts.backup_drill)        # 临时库恢复演练
+(cd backend && uv run python -m app.scripts.expire_reservations) # 释放超时库存预留
 (cd backend && uv run python -m app.scripts.load_test --requests 200 --concurrency 20)
 (cd backend && uv run python -m app.scripts.checkout_load --requests 30 --concurrency 10)
 ```
 
----
+`load_test` / `checkout_load` 只用于本机开发基线，会留下 dev 数据，不构成容量结论。
 
-# 早期原型（保留供参考与旧测试）
+## 测试方式
 
-**电商导购/客服 Agent —— 合规门禁原型（JDDC 公开语料口径 + GB/T 47746 门禁）**
-
-**一句话**：按 2026-09-01 实施的 GB/T 47746—2026，把「资损门禁」与「转人工」做成**可审计、可测试**的机制，
-并用公开真实语料口径做离线评测。
-
-**它是什么**：单人自主完成的求职作品集原型。**不是产品、不是商城、不接真实店铺 IM、没有真实流量**，
-店铺数据全部合成。承诺类结论一律不由 AI 作出。
-
----
-
-## 1. 为什么做这个（缺口不在「能不能答」，在「答错了谁负责」）
-
-- 行业口径：绝大多数卖家已用 AI，但真正部署「能自主执行全链路 + 人审决策」的 Agent 是少数；
-  同期 AI 客服被消费者协会点名为投诉新热点，售后类投诉占比居首。（数字来源与年份见
-  `docs/口径声明.md` 第四节，全部标注为外部对照，不进入本项目指标。）
-- 反面基线：海外有厂商把「用户沉默即视为已解决」计为解决并按结果收费。
-  **本项目明确不使用该口径**，并把它写成红线测试里的一条禁止项（见 `tests/test_no_false_claims.py`）。
-- 与平台件抢「答得快」没有空间；抢「答得可审计、错承诺可拦在输出之前」是空白格，
-  而且有刚生效的国标条文可以逐条对表。
-
-## 2. 三十秒看懂它做到哪
-
-| 国标义务（本项目落地口径） | 机制 | 可执行的证据 |
+| 项目 | 命令 | 前置条件 |
 |---|---|---|
-| 重大事项只解释不确认 | 高危意图（退款/赔偿/价保/投诉）只输出规则解释 + 条文出处，确认动作强制转人工 | `pytest tests/test_obligation1_explain_only.py -q` |
-| 人工入口不得隐藏 | 每轮必带人工出口；紧急词命中自动转接；出口补不齐就抛错不发送 | `pytest tests/test_obligation2_human_entry.py -q` |
-| 承诺白名单，输出**前**拦截 | 承诺类别不进入生成器输入（第一道）+ 输出侧词典与数字溯源复核（第二道） | `pytest tests/test_obligation3_commitment_whitelist.py -q` |
-| 留痕可溯 | 幂等键 + 决策链 + 条文版本 + 工具证据 + 哈希链可自检 | `pytest tests/test_obligation4_audit_trace.py -q` |
+| 后端单元 / 集成测试 | `(cd backend && uv run pytest -q)` | 无需外部服务（fixture 使用内存 SQLite） |
+| 后端静态检查 | `(cd backend && uv run ruff check app tests)` | `uv sync` 已安装 dev 依赖 |
+| 前端类型检查 / 构建 | `(cd frontend && npm run typecheck && npm run build)` | `npm install` 完成 |
+| 前端 E2E | `(cd frontend && npm run test:e2e)` | 全栈已启动；本机安装 Edge（`channel: "msedge"`） |
+| 任务级评测 | `(cd backend && uv run python -m app.scripts.task_eval)` | API 已启动且已 seed；默认店主账号 `owner@afterops.local` |
+| 审计链校验 | `(cd backend && uv run python -m app.scripts.verify_audit)` | 数据库可连接 |
 
-完整对照表（含 A1–A14 验收项的跑法与实测结果）：**[`docs/GBT-47746义务-测试映射.md`](docs/GBT-47746义务-测试映射.md)**
+复跑记录（2026-11-23）：后端 `346 passed`（215.85s，1 条 Starlette 弃用警告），`ruff check app tests` 与前端 `tsc --noEmit` 通过。项目记录（2026-11-12）：任务级评测 19/19、Playwright E2E 44 条通过；这两项需要全栈运行，本次未复跑，实际结果以当前环境为准。
 
-## 3. 快速开始（离线，零密钥，30 分钟内可跑完）
+`task_eval` 是 HTTP 级评测，会创建带唯一手机号前缀的评测顾客 / 订单，不重置演示数据；报告默认写入 `reports/task-eval.md`。
+
+## 数据、许可与安全
+
+### 数据与语料
+
+- `data/synthetic_shop/` 为人工构造的合成店铺数据，与真实商家、订单、快递单号无关。
+- 仓库不附带、不镜像 JDDC 原始语料；`data/jddc/` 仅保留论文与许可取证、探测日志和合成样例。论文为 LREC 2020（CC-BY-NC，非商业），数据集条款未取得一手来源，按「待核实、不重分发」处理。
+
+### 许可证
+
+- 代码许可证：**待补充**。仓库当前没有 `LICENSE` 文件，许可证选择见 `docs/待补与歧义清单.md` Q-16（未定）。
+- 第三方依赖与镜像遵循各自许可证；如需逐项清单：**待补充**。
+
+### 安全
+
+- 开发默认密码与密钥（`dev-only-change-me`、`owner123456` 等）只用于本地；生产必须在 `infra/.env.prod` 中全部替换。
+- 仓库不含真实密钥、令牌或个人信息；提交前扫描记录见 `脱敏检查清单.md`。
+
+## 旧原型（legacy）
+
+根目录的 `src/`、`tests/`、`evals/`、`ops/`、`scripts/`、`requirements.txt`、`pytest.ini` 是 2026-10 的离线 Agent 原型：规则意图 + 确定性工具 + 双时态知识库 + 生成前合规门禁 + 哈希链审计 + 独立进程编排。它不连接 Postgres，也不参与当前全栈启动。
 
 ```bash
-python -m venv .venv && .venv/Scripts/activate        # Linux/macOS: source .venv/bin/activate
+python -m venv .venv && .venv/Scripts/activate   # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env                                 # 全部默认值即可运行（Python 3.11+）
+copy .env.example .env                            # 根目录 .env.example 属于旧原型
 
-python -m pytest tests/ -q                             # ① 测试套件
-python -m src.shop.seed                                # ② 合成店铺库 + 内容哈希（可复现证明）
-python -m src.cli --demo --fresh-audit --rebuild       # ③ 11 轮演示：金额溯源/承诺拦截/自动转人工
-python -m src.cli --ask "你能保证全额退款吗"            # ④ 单轮试问
-python -m ops.cli check                                 # ⑤ 服务预检（不动进程）
-python -m ops.cli start --smoke --port 18081             # ⑥ 一键启动 + 一发真请求验证
-python -m ops.cli stop --port 18081                      # ⑦ 一键停止（端口释放 + 无孤儿校验）
-python -m evals.run_eval                               # ⑤ 170 条四档评测 + 生成报告
-python scripts/mutation_test.py --report reports/变异测试.md   # ⑥ 注入缺陷，验证测试有鉴别力
+python -m pytest tests/ -q
+python -m src.shop.seed
+python -m src.cli --demo --fresh-audit --rebuild
+python -m src.cli --ask "你能保证全额退款吗"
+python -m ops.cli check
+python -m ops.cli start --smoke --port 18081
+python -m ops.cli stop --port 18081
+python -m evals.run_eval
 ```
 
-交互式会话：`python -m src.cli`（同一 `--session` 内有多轮上下文与幂等重放）。
-演示逐轮讲解与手工步骤核对：[`docs/演示脚本.md`](docs/演示脚本.md)。
+旧原型的架构、意图体系、门禁映射与评测口径见 `docs/架构图.md`、`docs/意图体系.md`、`docs/GBT-47746义务-测试映射.md`、`docs/口径声明.md`、`docs/演示脚本.md`。Python 版本沿用旧原型说明（3.11+）。
 
-### 3.1 一键启动 / 一键停止（服务编排）
+## 贡献说明
 
-```bash
-python -m ops.cli check            # 只预检：端口 / provider 配置 / 目录可写，不动任何进程
-python -m ops.cli start            # 已在运行 → 先按逆序全部停止 → 再按依赖顺序启动 → 逐个健康确认
-python -m ops.cli start --smoke    # 启动后再打一发 /health + /v1/chat + /v1/audit，确认「进程在」=「能答」
-python -m ops.cli stop             # 优雅停止：服务自机关闭 → 等在途 → 超时才升级强杀 → 三项残留校验
-python -m ops.cli stop --force     # 服务卡死时直接回收整棵进程树
-python -m ops.cli status           # 未运行 / 运行中(PID) / 状态文件残留 / 健康详情
-python -m ops.cli logs api -n 50   # 日志尾部（子进程 stdout+stderr 合并在一处）
-```
+- 本仓库为私有仓库，协作需由仓库所有者邀请；公开协作流程：**待补充**。
+- 仓库未提供 `CONTRIBUTING.md`、Issue / PR 模板或 CI 配置，具体约定：**待补充**。
+- 提交前至少执行：
+  - `(cd backend && uv run pytest -q && uv run ruff check app tests)`
+  - 涉及前端时：`(cd frontend && npm run typecheck && npm run build)`
+  - 涉及界面 / 交易流程时：全栈启动后 `npm run test:e2e` 与 `task_eval`
+- 现有提交信息使用中文描述；新增提交建议说明「改了什么、为什么、如何验证」。
 
-停止流程一定校验三件事：**进程真没了（无孤儿）、端口真释放了、状态与停机令牌文件真清掉了**——
-只在嘴上说「已停止」不算完成。服务侧收尾顺序：停止接新请求 → 等在途请求归零（`DRAIN_SECONDS`）
-→ 关监听 socket → 关审计连接与线程池 → 删临时文件 → 落「收尾完成」日志。
-契约、异常恢复建议、如何新增服务：[`docs/服务编排说明.md`](docs/服务编排说明.md)。
+## 文档索引
 
-## 4. 实测结果（全部为本机 2026-10-06 复跑所得）
+| 文档 | 内容 |
+|---|---|
+| [PRD v0](docs/product/PRD-v0.md) | 产品范围、逐版本能力与边界 |
+| [90 天路线](docs/product/90-day-roadmap.md) | 当前阶段计划与验证口径 |
+| [ADR-0001](docs/adr/0001-product-scope-and-stack.md) | 产品范围与技术选型决策 |
+| [部署手册](docs/deployment.md) | 生产 Compose、TLS、备份与恢复 |
+| [项目地图](项目地图.md) | 代码盘点（旧原型为主，注明新后端 / 前端并存） |
+| [交付总结](交付总结.md) | 旧原型交付清单与验证记录（2026-10） |
+| [reports/](reports/) | 各功能验证记录、任务级评测与压测输出 |
 
-| 指标 | 实测 | 口径 |
-|---|---|---|
-| 测试套件 | 全绿（382 条，150.9s） | `python -m pytest tests/ -q` |
-| 变异测试 | 注入 12 / 捕获 **12/12** / 还原 MD5 一致 | `reports/变异测试.md` |
-| 评测用例判分通过 | **166/170 = 97.6%**（T1 45/45、T2 45/45、T3 37/40、T4 39/40） | `reports/评测结果.md` |
-| **错承诺条数（红线）** | **0** | 170 条输出中白名单外承诺 0 条。**不报拦截率类指标** |
-| 意图 Top-1 | 154/170 = 90.6% | 规则分类器（非模型），高危档 77.5% |
-| Hit@5 | 45/45 = 100% | 知识库仅 16 条目，**不外推到生产规模** |
-| 工具调用执行成功率 | 267/267 = 100%（其中查到数据 259/267） | `not_found` 属正确行为，不算失败 |
-| Correct handoff | 152/170 = 89.4%（漏转 8/75、多余转 10/95 分开列） | 目标 ≥98% 是**从业者模板口径，非行业标准** |
-| 端到端延迟 | 服务内 p95 15ms（template）；HTTP 往返 p50 30ms / max 70ms（n=12，本机） | 模型链路**未测** |
-| 服务起停 | 启动 0.6s 就绪；停机走「服务自机关闭」，端口释放与无孤儿校验通过 | `logs/api.log` 无脏退出（有断言把守） |
-| 语料闸门 F-001 | **未通过**：8 个入口全部无法直取数据 | `reports/P0-语料闸门.md`（逐入口 HTTP 证据） |
+## 已知边界
 
-每个数的「实测 / 设计值 / 未测」三态声明：**[`docs/口径声明.md`](docs/口径声明.md)**。
-尚未完成的闭环（需要人来做的部分）：**[`docs/待补与歧义清单.md`](docs/待补与歧义清单.md)**，
-其中 A5 的 kappa 已就绪但**必须由你独立标注 8 条样本后**才能出数：
-
-```bash
-python -m evals.kappa --selftest     # 校验计算器（与手算一致）
-# 填 evals/human_sampling_5pct.csv 的 human_verdict 列后：
-python -m evals.kappa
-```
-
-## 5. 架构（自研轻量编排，不引入 LangChain）
-
-```
-用户一句话（CLI 或 POST /v1/chat）
-  → dialogue  槽位跟踪 / 指代消解 / 上下文预算
-  → intents   规则关键词权重 → 3 一级 / 20 二级 + 高危集 + 诱导句式
-  → tools     5 个确定性工具（Pydantic 入参校验、3s 超时、降级不给数字）→ SQLite
-  → kb        双时态政策/FAQ（valid_from/valid_until + 版本链 + TTL + stale 监控，默认 BM25）
-  → gates ★   只解释不确认 / 人工入口 / 承诺白名单（生成前剔除）/ 置信度 / fail-closed
-  → llm       template（默认，确定性）| ollama | openai —— 只允许改写门禁批准的原子句
-  → output_scan 第二道锁：承诺词典 + 数字溯源，违规整句替换
-  → audit     幂等键 + 决策链 + 条文版本 + 工具证据 + 哈希链
-
-编排层：ops/cli → 预检（端口/配置/可写）→ 按依赖启动 → 健康确认 → 优雅停机 + 残留回收
-```
-
-关键设计：**门禁在生成之前**。生成器的输入 `GenerationPlan` 里根本没有承诺类别，
-所以「输出前拦截」是靠数据流形状实现的，不靠提示词自觉。
-细节与接口契约：[`docs/架构图.md`](docs/架构图.md)。
-
-## 6. 目录
-
-```
-src/          intents / tools / kb / dialogue / gates ★ / audit / llm / agent / cli / schemas / config
-              app.py（应用容器）/ server.py（HTTP 服务 + 优雅停机）
-ops/          process.py（跨平台进程控制）/ services.py（服务抽象与清单）/ manager.py / cli.py
-data/         synthetic_shop/（schema.sql + seed.sql + kb_seed.sql）
-              intents/（taxonomy.csv + jddc_label_map.csv）
-              gates/（commitment_whitelist.csv + committal_lexicon.csv + urgency_lexicon.txt）
-              jddc/（探测留证 + 论文存档 + 映射核对结果；不含语料本体）
-evals/        golden_set_v1.jsonl（170 条四档）+ judge.py + metrics.py + run_eval.py + kappa.py
-tests/        四条义务各一组 + 模块级 + 数据契约 + 口径纪律 + 交付物自检 + 编排真起真停（382 条）
-scripts/      fetch_jddc.py / clean_jddc.py / verify_jddc_mapping.py / mutation_test.py / perf_probe.py
-docs/         义务映射表 ★ / 意图体系 / 语料与许可留证 / 架构图 / 口径声明 / 演示脚本 / 待补清单
-reports/      P0-语料闸门 / 评测结果 / 变异测试 / 延迟实测.json
-```
-
-## 7. 关键约束与异常处理（一句话版）
-
-- **数值**：金额/库存/状态一律 SQL 产出，模型不参与计算；输出里出现无法溯源的数字即被拦（A9 实测通过）。
-- **工具失败**：`INVALID_ARGS / TIMEOUT / ERROR / NOT_FOUND` 四种状态，降级时**不返回任何数字**，
-  回答只能讲规则并转人工。
-- **知识库失效**：条目过期或下线 → 检索剔除 + `stale_retrieval` 记录；高危问题无现行条文 → `fail_closed`，
-  不编造规则。
-- **模型不可用**：provider 报错 → 退回确定性模板渲染，`degraded=True` 落进审计。
-- **服务停不干净**：优雅停机超时 → SIGTERM/taskkill → 仍不退 → 强杀进程树。端口未释放或有孤儿进程
-  都会单独报失败并给出恢复命令；没验证过的事不会被写成「已停止」。
-- **人工出口缺失**：先补齐（留 `G-009-post-check` 痕迹），补不齐直接 `HandoffMissing` 抛出，不发送。
-- **重放**：同 `request_key` 不重判，返回原结论并 `replay_count += 1`。
-
-## 8. 明确没做 / 做不到（未覆盖清单）
-
-- 不做商城、下单支付、多商家平台、真实店铺 IM、峰值容量、真实拦截效果口径（方案 §1.3）。
-- **JDDC 原始语料未入库**：官方发放页已失效、平台域名本机不可解析、境内镜像检索为空、
-  历史对象存储桶不存在。清洗/抽样/映射核对管道已就绪并可复跑，等文件入库。
-  详见 `reports/P0-语料闸门.md` 与 `docs/语料与许可留证.md`。
-- 外部模型链路（延迟/成本/遵守度）、BGE-M3 向量检索、流式首包、真实流量指标：均未测，见 `docs/口径声明.md` §三。
-- 国标里与**标识提示、个人信息处理、内容合规**相关的其他条款：本原型未实现，只覆盖四条资损/责任相关义务。
-- 评测集是**单人自标**的 golden set，不是 JDDC 真值；kappa 只校准机判与人工判定的一致性，不校准 gold 本身。
-
-## 9. 许可与数据声明
-
-- 语料侧：本仓库**不附带、不镜像、不重分发** JDDC 原始数据；引用论文示例时标注出处（LREC 2020, pp.459–466）。
-  论文页脚许可为 **CC-BY-NC**（非商业），数据集本身条款未取得——按「待核实 + 非商业引用」处理。
-- 店铺侧：`data/synthetic_shop/` 全部为人工构造的合成记录，与任何真实商家、真实订单、真实快递单号无关。
-- 代码许可：待定，见 `docs/待补与歧义清单.md` Q-16。
-
-## 10. 简历口径（一句话，不含任何未验证宣称）
-
-> 电商客服/导购 Agent 原型（JDDC 公开语料口径离线评测 + GB/T 47746 合规门禁，单人自主，无店铺、无真实流量）：
-> 承诺白名单在生成前拦截、重大事项只解释不确认、人工入口每轮必达、决策链留痕可反查条文版本；
-> 170 条四档离线评测错承诺 0 条，10 个注入缺陷全部被测试捕获。
+- 支付为 mock PSP；未接真实支付渠道与结算。
+- 短信未接入，OTP 仅在开发环境返回 `debug_code`。
+- 物流节点由商家手工录入 / 推进，未接承运商 API 与面单。
+- 邮件通过 SMTP 发送，开发环境使用 Mailpit；生产需配置真实 SMTP。
+- 默认 AI 为确定性模板；Ollama / OpenAI 链路可配置，但模型质量、成本与线上效果未做量化评测。
+- 单机 Compose 部署，不是高可用架构；数据库与上传卷为单点，未接 WAF / CDN / 对象存储。
+- 限流基于数据库计数，不是分布式限流。
+- 旧原型与当前全栈共用同一仓库，但数据层、启动方式与测试入口相互独立。
